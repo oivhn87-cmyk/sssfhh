@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>オンラインじゃんけん</title>
+
+  <!-- スマホのホーム画面追加用（PWA風）設定 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="じゃんけん">
+  <link rel="apple-touch-icon" href="https://fav.farm/✊">
+  <link rel="icon" href="https://fav.farm/✊">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f0f4f8;
+      margin: 0;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      color: #333;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-top: 0;
+    }
+    .input-group {
+      margin-bottom: 12px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      font-size: 1rem;
+      border: 2px solid #cbd5e0;
+      border-radius: 8px;
+      text-align: center;
+      outline: none;
+    }
+    input[type="text"]:focus {
+      border-color: #4299e1;
+    }
+    .start-btn {
+      background: #48bb78;
+      color: white;
+      font-size: 1.1rem;
+      padding: 12px;
+      width: 100%;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    #game-screen {
+      display: none;
+    }
+    .status {
+      font-size: 0.85rem;
+      background: #e2e8f0;
+      padding: 8px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      word-break: break-all;
+    }
+    .timer-display {
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: #e53e3e;
+      height: 45px;
+      line-height: 45px;
+      margin: 5px 0;
+    }
+    .display-area {
+      display: flex;
+      justify-content: space-around;
+      margin: 15px 0;
+    }
+    .player-box {
+      flex: 1;
+    }
+    .player-name {
+      font-weight: bold;
+      font-size: 0.95rem;
+      color: #4a5568;
+      margin-bottom: 5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .hand-icon {
+      font-size: 3rem;
+      height: 60px;
+      line-height: 60px;
+    }
+    .result {
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: #3182ce;
+      height: 36px;
+      margin: 10px 0;
+    }
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 10px;
+    }
+    button.choice-btn {
+      flex: 1;
+      padding: 14px 0;
+      font-size: 1.8rem;
+      border: none;
+      border-radius: 12px;
+      background: #edf2f7;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      transition: background 0.2s, transform 0.1s;
+    }
+    button.choice-btn:active {
+      transform: scale(0.95);
+      background: #cbd5e0;
+    }
+    button:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+  </style>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+<div class="card">
+  <!-- 設定画面 -->
+  <div id="setup-screen">
+    <h1>オンラインじゃんけん</h1>
+    <div class="input-group">
+      <input type="text" id="username-input" placeholder="あなたの名前" maxlength="8">
+    </div>
+    <div class="input-group">
+      <input type="text" id="room-input" placeholder="合言葉 (例: 1234)" maxlength="10">
+    </div>
+    <button class="start-btn" onclick="startGame()">部屋に入る</button>
+  </div>
+
+  <!-- ゲーム画面 -->
+  <div id="game-screen">
+    <div id="status" class="status">接続中...</div>
+    
+    <div id="timer" class="timer-display"></div>
+
+    <div class="display-area">
+      <div class="player-box">
+        <div id="my-label" class="player-name">あなた</div>
+        <div id="my-hand" class="hand-icon">❓</div>
+      </div>
+      <div class="player-box">
+        <div id="opp-label" class="player-name">相手</div>
+        <div id="opp-hand" class="hand-icon">❓</div>
+      </div>
+    </div>
+
+    <div id="result" class="result">相手を待っています</div>
+
+    <div class="btn-group">
+      <button id="btn-gu" onclick="play('✊')" class="choice-btn" disabled>✊</button>
+      <button id="btn-choki" onclick="play('✌️')" class="choice-btn" disabled>✌️</button>
+      <button id="btn-pa" onclick="play('🖐️')" class="choice-btn" disabled>🖐️</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let myName = "プレイヤー1";
+  let oppName = "相手";
+  let roomCode = "1234";
+  let peer = null;
+  let conn = null;
+  let myChoice = null;
+  let oppChoice = null;
+  let timerInterval = null;
+
+  const setupScreen = document.getElementById('setup-screen');
+  const gameScreen = document.getElementById('game-screen');
+  const usernameInput = document.getElementById('username-input');
+  const roomInput = document.getElementById('room-input');
+  const statusEl = document.getElementById('status');
+  const timerEl = document.getElementById('timer');
+  const resultEl = document.getElementById('result');
+  const myHandEl = document.getElementById('my-hand');
+  const oppHandEl = document.getElementById('opp-hand');
+  const myLabelEl = document.getElementById('my-label');
+  const oppLabelEl = document.getElementById('opp-label');
+  const buttons = document.querySelectorAll('.choice-btn');
+
+  function startGame() {
+    if (usernameInput.value.trim() !== "") myName = usernameInput.value.trim();
+    if (roomInput.value.trim() !== "") roomCode = roomInput.value.trim();
+
+    myLabelEl.innerText = myName;
+    setupScreen.style.display = "none";
+    gameScreen.style.display = "block";
+
+    initPeer();
+  }
+
+  function initPeer() {
+    const hostID = "janken-room-" + roomCode;
+    peer = new Peer();
+
+    peer.on('open', () => {
+      conn = peer.connect(hostID);
+
+      conn.on('open', () => {
+        setupConnection();
+        conn.send({ type: 'name', value: myName });
+        statusEl.innerText = "部屋「" + roomCode + "」に接続しました！";
+      });
+
+      peer.on('error', () => {
+        peer.destroy();
+        peer = new Peer(hostID);
+        peer.on('open', () => {
+          statusEl.innerText = "部屋「" + roomCode + "」を作成しました。相手を待っています...";
+        });
+        peer.on('connection', (c) => {
+          conn = c;
+          setupConnection();
+          conn.send({ type: 'name', value: myName });
+          statusEl.innerText = "対戦相手が参加しました！";
+        });
+      });
+    });
+  }
+
+  function setupConnection() {
+    buttons.forEach(btn => btn.disabled = false);
+    resultEl.innerText = "手を選んでね！";
+
+    conn.on('data', (data) => {
+      if (data.type === 'name') {
+        oppName = data.value;
+        oppLabelEl.innerText = oppName;
+      } else if (data.type === 'choice') {
+        oppChoice = data.value;
+        checkResult();
+      }
+    });
+
+    conn.on('close', () => {
+      statusEl.innerText = "相手が切断しました";
+      buttons.forEach(btn => btn.disabled = true);
+      resetMatch();
+    });
+  }
+
+  function play(choice) {
+    if (myChoice !== null) return;
+
+    myChoice = choice;
+    myHandEl.innerText = choice;
+    buttons.forEach(btn => btn.disabled = true);
+
+    if (conn && conn.open) {
+      conn.send({ type: 'choice', value: choice });
+    }
+
+    resultEl.innerText = "相手の選択待ち...";
+    checkResult();
+  }
+
+  function checkResult() {
+    if (myChoice && oppChoice) {
+      startCountdown(3, () => {
+        oppHandEl.innerText = oppChoice;
+
+        if (myChoice === oppChoice) {
+          resultEl.innerText = "引き分け！";
+        } else if (
+          (myChoice === '✊' && oppChoice === '✌️') ||
+          (myChoice === '✌️' && oppChoice === '🖐️') ||
+          (myChoice === '🖐️' && oppChoice === '✊')
+        ) {
+          resultEl.innerText = `${myName}の勝ち！🎉`;
+        } else {
+          resultEl.innerText = `${myName}の負け...😭`;
+        }
+
+        setTimeout(() => {
+          resetMatch();
+        }, 3000);
+      });
+    }
+  }
+
+  function startCountdown(seconds, callback) {
+    let count = seconds;
+    timerEl.innerText = count;
+    resultEl.innerText = "ぽん...！";
+
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      count--;
+      if (count > 0) {
+        timerEl.innerText = count;
+      } else {
+        clearInterval(timerInterval);
+        timerEl.innerText = "";
+        callback();
+      }
+    }, 1000);
+  }
+
+  function resetMatch() {
+    myChoice = null;
+    oppChoice = null;
+    myHandEl.innerText = '❓';
+    oppHandEl.innerText = '❓';
+    resultEl.innerText = '手を選んでね！';
+    timerEl.innerText = '';
+    if (conn && conn.open) {
+      buttons.forEach(btn => btn.disabled = false);
+    }
+  }
+</script>
+
+</body>
+</html>
